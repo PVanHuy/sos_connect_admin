@@ -1,0 +1,762 @@
+---
+description: Production engineering rules for SOS Connect React Admin
+alwaysApply: true
+---
+
+# SOS Connect Admin — Project Rules
+
+## 1. Project mission
+
+This repository is the web administration portal for SOS Connect, an emergency/disaster-response platform.
+
+The admin portal must be treated as a real production application, not a demo or tutorial project.
+
+Primary goals:
+- reliability
+- maintainability
+- security
+- predictable UX
+- strong typing
+- testability
+- clear separation of concerns
+- scalable architecture for future modules
+
+The application communicates with a NestJS backend through REST APIs and WebSocket/Socket.IO where realtime updates are required.
+
+---
+
+## 2. Mandatory technology direction
+
+Use this stack unless the existing project already has an equivalent, established solution:
+
+- React
+- TypeScript with strict mode
+- Vite
+- React Router
+- TanStack Query for server state
+- Zustand for small client/global UI state
+- Axios for HTTP
+- Ant Design for admin UI components
+- React Hook Form for complex forms
+- Zod for validation and schema parsing
+- Vitest + Testing Library for unit/component tests
+- Playwright for critical end-to-end flows
+- ESLint + Prettier
+- MSW for API mocking in tests when useful
+
+Do not introduce Redux, MobX, Recoil, SWR, React Query alternatives, or another UI framework unless there is a concrete architectural reason and the user explicitly approves the change.
+
+Do not add dependencies merely for convenience.
+
+---
+
+## 3. Architecture
+
+Use a feature-oriented architecture.
+
+Preferred structure:
+
+src/
+  app/
+    router/
+    providers/
+    layouts/
+    config/
+  assets/
+  components/
+    ui/
+    shared/
+  features/
+    auth/
+    dashboard/
+    sos/
+    rescue-teams/
+    users/
+    notifications/
+    audit-logs/
+  hooks/
+  lib/
+    api/
+    websocket/
+    logger/
+    permissions/
+  stores/
+  types/
+  utils/
+  main.tsx
+
+Rules:
+
+- `features/*` contains domain-specific code.
+- `components/ui/*` contains reusable presentation components.
+- `components/shared/*` contains application-level reusable components.
+- `lib/*` contains infrastructure/integration code.
+- `stores/*` contains only client-side state that genuinely needs to be global.
+- `types/*` contains shared types that are not owned by one feature.
+- `utils/*` contains pure, domain-independent utilities.
+- Keep feature code close to the feature that owns it.
+- Do not create giant generic folders such as `services`, `helpers`, or `common` that become dumping grounds.
+
+For a feature, prefer:
+
+features/sos/
+  api/
+  components/
+  hooks/
+  pages/
+  schemas/
+  types/
+  utils/
+
+---
+
+## 4. Dependency direction
+
+Enforce this dependency direction:
+
+pages/components
+  -> feature hooks
+  -> feature API/domain logic
+  -> lib/infrastructure
+
+UI components must not directly construct Axios requests.
+
+Pages must not contain large API/business logic.
+
+API modules must not contain presentation code.
+
+Pure utility functions must not depend on React.
+
+Avoid circular dependencies.
+
+---
+
+## 5. TypeScript rules
+
+TypeScript strict mode is mandatory.
+
+Prefer:
+- explicit interfaces/types at API boundaries
+- discriminated unions for states
+- typed API responses
+- typed route params
+- typed form values
+- `unknown` instead of `any` for unknown external data
+
+Avoid:
+- `any`
+- non-null assertions (`!`) unless there is a proven invariant
+- `as` casts used to silence type errors
+- duplicated versions of the same domain type
+- stringly-typed status values spread across the codebase
+
+When backend contracts are known, model them explicitly.
+
+Example:
+
+type SosStatus =
+  | 'NEW'
+  | 'ACKNOWLEDGED'
+  | 'IN_PROGRESS'
+  | 'RESOLVED'
+  | 'CANCELLED';
+
+Do not silently invent API fields. If a backend contract is unknown, isolate the assumption behind a type/schema and mark it clearly.
+
+---
+
+## 6. API layer
+
+Centralize HTTP configuration.
+
+Preferred pattern:
+
+lib/api/
+  client.ts
+  endpoints.ts
+  errors.ts
+  interceptors.ts
+
+Feature API code belongs inside its feature:
+
+features/sos/api/sos.api.ts
+
+Requirements:
+- one configured Axios instance
+- environment-based base URL
+- request/response typing
+- centralized auth handling
+- centralized error normalization
+- reasonable timeout configuration
+- no duplicated Axios configuration
+- no hard-coded production URLs
+
+Never put access tokens, secrets, private keys, or credentials in source code.
+
+Frontend environment variables are not secrets. Only expose values that are safe to ship to the browser.
+
+---
+
+## 7. Authentication and authorization
+
+The admin portal must be designed around authenticated access.
+
+Support a clear model for:
+
+- unauthenticated
+- authenticated
+- loading session
+- forbidden
+
+Authorization must be role/permission driven.
+
+Never rely only on hiding a button in the frontend.
+
+Frontend permissions are for UX.
+Backend authorization is the source of truth.
+
+Prefer permission checks such as:
+
+can('sos.read')
+can('sos.update')
+can('users.manage')
+can('audit.read')
+
+Do not scatter raw role strings throughout JSX.
+
+Use centralized route guards and permission helpers.
+
+---
+
+## 8. State management
+
+Use the correct state tool for the correct job.
+
+TanStack Query:
+- server data
+- caching
+- pagination
+- mutations
+- retries
+- invalidation
+- background refetching
+
+Zustand:
+- sidebar state
+- map display preferences
+- selected UI filters that truly need global access
+- lightweight client-only state
+
+React local state:
+- temporary UI state
+- modal visibility
+- input state when not handled by React Hook Form
+
+Do not copy server data into Zustand just because it is easier.
+
+Avoid global state for data that belongs to one screen.
+
+---
+
+## 9. Data fetching rules
+
+Every query must have explicit:
+- query key
+- query function
+- loading state
+- error state
+- empty state where applicable
+
+Use query keys that encode important parameters.
+
+Example:
+
+['sos', 'list', { status, page, pageSize, province }]
+
+Use mutation invalidation intentionally.
+
+Do not refetch the entire application after every mutation.
+
+Prefer targeted cache invalidation or direct cache updates when safe.
+
+---
+
+## 10. Forms and validation
+
+Use React Hook Form for complex admin forms.
+
+Use Zod schemas for validation.
+
+Validation must exist at:
+- UI form level
+- API boundary when parsing external data is necessary
+
+Do not trust browser validation alone.
+
+Error messages must be understandable to administrators.
+
+Preserve user-entered values when a request fails, unless the workflow explicitly requires resetting.
+
+---
+
+## 11. UI and UX
+
+Use Ant Design consistently.
+
+Do not mix multiple UI libraries without explicit approval.
+
+Admin UX must support:
+- responsive desktop/tablet layouts
+- loading states
+- skeletons where useful
+- empty states
+- error states
+- disabled states
+- confirmation for destructive actions
+- success/error feedback
+- accessible labels and keyboard navigation
+
+Avoid excessive custom CSS when Ant Design already provides the required behavior.
+
+Do not create visually flashy UI at the expense of operational clarity.
+
+For emergency operations, information hierarchy and fast scanning are more important than decoration.
+
+---
+
+## 12. SOS-specific UX rules
+
+The SOS module is safety-critical from an operational perspective.
+
+Never make dangerous actions one-click without confirmation when consequences are significant.
+
+Destructive or irreversible actions must:
+- show what will happen
+- require explicit confirmation
+- display clear final state
+
+Examples:
+- cancelling an SOS
+- deleting a rescue team
+- disabling an operator account
+- changing critical incident state
+
+Use consistent status colors and labels, but never communicate status using color alone.
+
+Every SOS status must have a text label.
+
+---
+
+## 13. Map architecture
+
+The map is a first-class feature of SOS Connect.
+
+Keep map concerns isolated from unrelated UI.
+
+Preferred separation:
+
+features/sos/
+  map/
+    components/
+    hooks/
+    utils/
+    types/
+
+Do not make the entire dashboard re-render because one map marker changed.
+
+For large marker sets:
+- avoid rendering unnecessary markers
+- use clustering when appropriate
+- use viewport/bounds-based querying when appropriate
+- debounce map movement
+- avoid requesting data for every pixel movement
+- cancel stale requests where possible
+
+Realtime events must update only the relevant query/cache state rather than force a full page reload.
+
+---
+
+## 14. Realtime/WebSocket rules
+
+Use a dedicated WebSocket/Socket.IO infrastructure layer.
+
+Preferred:
+
+lib/websocket/
+  client.ts
+  events.ts
+  types.ts
+
+Feature-specific listeners belong in feature hooks/services.
+
+Rules:
+- establish one controlled connection lifecycle
+- clean up listeners on unmount
+- never register duplicate listeners
+- handle reconnects
+- handle auth changes
+- make connection status observable
+- validate/normalize external event payloads when practical
+
+WebSocket events should update TanStack Query cache or narrowly scoped client state.
+
+Never blindly call `window.location.reload()` to reflect realtime changes.
+
+---
+
+## 15. Error handling
+
+Create a normalized application error model.
+
+Distinguish:
+- validation error
+- authentication error
+- authorization error
+- network error
+- timeout
+- server error
+- unknown error
+
+Never expose raw backend stack traces to users.
+
+Log useful technical information through the application's logging mechanism, not with random console statements everywhere.
+
+User-facing messages must explain the action they can take.
+
+---
+
+## 16. Security
+
+Treat all external input as untrusted.
+
+Rules:
+- never use `dangerouslySetInnerHTML` unless absolutely required and sanitized
+- never store secrets in frontend source
+- never trust frontend permission checks
+- never put sensitive tokens in URLs
+- avoid localStorage for sensitive data when the backend/auth architecture provides a safer mechanism
+- sanitize/validate external content where appropriate
+- do not log tokens, passwords, personal secrets, or sensitive payloads
+
+Do not invent a security mechanism when the backend authentication contract is not known. Isolate auth assumptions behind an adapter.
+
+---
+
+## 17. Routing
+
+Use nested routes and layouts.
+
+Preferred structure:
+
+/login
+/app
+/app/dashboard
+/app/sos
+/app/sos/:id
+/app/rescue-teams
+/app/users
+/app/audit-logs
+/settings
+
+Protected routes must be enforced centrally.
+
+Keep route definitions in one clear location.
+
+Do not hard-code navigation logic throughout unrelated components.
+
+---
+
+## 18. Tables and pagination
+
+Admin tables must be designed for real datasets.
+
+Always consider:
+- server-side pagination
+- server-side filtering
+- server-side sorting
+- stable column definitions
+- loading state
+- empty state
+- error state
+- row actions
+- URL/query-state synchronization when useful
+
+Do not load thousands of records just to paginate them on the client.
+
+Prefer URL-driven filters for important list pages so views can be bookmarked/shared.
+
+---
+
+## 19. Naming conventions
+
+Use:
+
+- PascalCase for React components
+- camelCase for functions and variables
+- UPPER_SNAKE_CASE only for true constants/enums when appropriate
+- kebab-case for route paths
+- `.tsx` for React components
+- `.ts` for non-React TypeScript
+
+Examples:
+
+SosTable.tsx
+SosDetailsPage.tsx
+useSosQuery.ts
+sos.api.ts
+sos.schema.ts
+permission.ts
+
+Avoid vague names:
+
+helpers.ts
+common.ts
+misc.ts
+data.ts
+manager.ts
+
+unless the file has a clearly defined responsibility.
+
+---
+
+## 20. Components
+
+Keep components focused.
+
+A component should not simultaneously:
+- fetch many unrelated APIs
+- own global state
+- transform complex domain data
+- contain large business rules
+- render a huge page tree
+
+Extract hooks and domain functions when complexity grows.
+
+Prefer composition over extremely configurable "god components".
+
+Do not create abstractions before there is a repeated pattern.
+
+---
+
+## 21. Business logic
+
+Business rules must live outside JSX whenever they are non-trivial.
+
+Bad:
+
+if (status === 'NEW' && user.role === 'ADMIN' && distance < 5000) ...
+
+Prefer a named domain function:
+
+canAssignRescueTeam({
+  sos,
+  user,
+  distance,
+})
+
+This makes logic testable.
+
+Do not duplicate business rules across:
+- table
+- detail page
+- modal
+- dashboard
+
+Centralize them.
+
+---
+
+## 22. Performance
+
+Optimize based on evidence, not superstition.
+
+Prefer:
+- memoization only where it provides value
+- stable query keys
+- pagination
+- virtualization for genuinely large lists
+- code splitting for large feature areas
+- lazy-loading heavy map/chart modules
+- avoiding unnecessary context updates
+
+Do not add `useMemo`, `useCallback`, or `React.memo` everywhere.
+
+Avoid premature optimization.
+
+---
+
+## 23. Testing
+
+Minimum testing expectations:
+
+Unit tests:
+- utility functions
+- permission logic
+- domain/business rules
+- data transformation
+
+Component tests:
+- forms
+- critical tables
+- important states
+- permission-based rendering
+
+E2E tests:
+- login
+- dashboard loads
+- SOS filtering
+- SOS details
+- critical update workflow
+- logout
+
+Bug fixes should add a regression test when practical.
+
+Do not write tests that only assert implementation details.
+
+Prefer user-visible behavior.
+
+---
+
+## 24. Accessibility
+
+Every interactive element must be keyboard usable where applicable.
+
+Use semantic HTML and Ant Design accessibility features.
+
+Requirements:
+- meaningful labels
+- descriptive buttons
+- focus states
+- accessible dialogs
+- no color-only status communication
+- sufficient text contrast
+- keyboard navigation for important flows
+
+---
+
+## 25. Environment configuration
+
+Use environment variables for environment-specific configuration.
+
+Example:
+
+VITE_API_URL=
+VITE_SOCKET_URL=
+VITE_MAP_STYLE_URL=
+
+Provide:
+
+.env.example
+
+Never commit:
+- `.env`
+- API secrets
+- private keys
+- production credentials
+
+Validate required environment configuration at application startup.
+
+---
+
+## 26. Git and code quality
+
+Before considering a change complete:
+
+1. Run formatting.
+2. Run lint.
+3. Run TypeScript checks.
+4. Run relevant tests.
+5. Run the production build when the change affects build/runtime behavior.
+
+Do not knowingly leave:
+- TypeScript errors
+- ESLint errors
+- broken imports
+- unused dependencies
+- dead code
+- commented-out abandoned implementations
+
+Keep commits focused.
+
+Avoid unrelated refactors in feature work.
+
+---
+
+## 27. Cursor/AI behavior
+
+Before editing:
+- inspect the existing architecture
+- inspect nearby files
+- identify reusable patterns
+- inspect relevant types/API contracts
+- avoid inventing conventions that already exist
+
+When implementing a feature:
+1. understand the existing code
+2. state the affected areas mentally
+3. reuse existing abstractions when appropriate
+4. make the smallest coherent change
+5. update/add tests
+6. run validation
+
+Never rewrite large sections of the project just because another style looks nicer.
+
+When there is an existing pattern, follow it.
+
+When the architecture is genuinely inconsistent, propose a focused migration instead of silently changing everything.
+
+---
+
+## 28. No fake backend assumptions
+
+Do not invent endpoints, response shapes, socket events, permissions, or database fields without evidence.
+
+If backend integration is not available yet:
+- isolate the API contract
+- use mock data/MSW
+- mark clearly what is mocked
+- keep the interface compatible with the expected backend
+
+Do not hard-code fake production behavior into components.
+
+---
+
+## 29. Comments and documentation
+
+Prefer self-explanatory code.
+
+Comments should explain:
+- why a non-obvious decision exists
+- external constraints
+- safety considerations
+- tricky business rules
+
+Do not write comments that merely restate the code.
+
+Do not remove useful business or architectural comments during refactors.
+
+Document important feature-level decisions in appropriate markdown files.
+
+---
+
+## 30. Definition of done
+
+A feature is not complete merely because it renders.
+
+Before declaring a feature complete, verify:
+
+- architecture follows project rules
+- TypeScript passes
+- lint passes
+- formatting passes
+- relevant tests pass
+- loading/error/empty states exist
+- permission rules are respected
+- API errors are handled
+- destructive actions are confirmed
+- responsive behavior is acceptable
+- no secrets are introduced
+- no unnecessary dependencies are added
+- build succeeds
+
+The final implementation should look like code maintained by a professional production engineering team, not generated demo code.
