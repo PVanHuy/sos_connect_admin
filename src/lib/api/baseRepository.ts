@@ -167,7 +167,7 @@ export class BaseRepository {
 
     const mergedHeaders = { ...baseHeaders, ...(headers ?? {}) }
 
-    logger.debug('postMultipartData', { uri })
+    logger.debug(`postMultipartData ${uri}`)
     const res = await apiClient.post<TResponse>(uri, formData, { headers: mergedHeaders })
     return res.data
   }

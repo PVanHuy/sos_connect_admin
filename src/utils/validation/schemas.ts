@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import {
   isValidPersonName,
-  isValidVnPhone,
   validateEmail,
   validatePassword,
   validatePhone,

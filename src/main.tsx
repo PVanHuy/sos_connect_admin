@@ -5,7 +5,8 @@ import { appEnv } from './app/config/env'
 import App from './App'
 import './index.css'
 import 'leaflet/dist/leaflet.css'
-import 'react-leaflet-markercluster/styles'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 
 void appEnv
 
